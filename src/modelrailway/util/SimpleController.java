@@ -30,10 +30,17 @@ public class SimpleController implements Controller {
 	 * stopped and not currently following a route.
 	 */
 	private Route[] routes;
+	
+	/**
+	 * The topology of the rail network. Each section knows the possible routes
+	 * between sections.
+	 */
+	private Section[] sections;
 		
-	public SimpleController(Train... trains) {
+	public SimpleController(Train[] trains, Section[] sections) {
 		this.routes = new Route[trains.length];
 		this.trains = trains;
+		this.sections = sections;
 	}
 	
 	@Override
@@ -49,22 +56,30 @@ public class SimpleController implements Controller {
 	@Override
 	public boolean start(int trainID, Route route) {
 		Train train = trains[trainID];
-		// Now, check whether the train is on the starting section.
-		if (route.firstSection() == train.currentSection()) {
+		if (isValid(route) && route.firstSection() == train.currentSection()) {
+			// Yes, route is valid and train is on the starting section.
 			routes[trainID] = route;
-			// In the simple controller, trains always move in the forwards
-			// direction. This is necessary because the controller has no
-			// knowledge of the network topology and cannot make any
-			// distinctions about what directions make sense.
-			send(new Event.DirectionChanged(trainID,true));
-			// In the simple controller, trains always move at a fixed velocity.
-			send(new Event.SpeedChanged(trainID,0.75f));
+			// Attempt to lock next section in route.
+			int current = route.firstSection();
+			int next = route.nextSection(route.firstSection());
+			Integer nextnext = route.nextSection(next);
+			if(sections[next].lockRoute(trainID, current, nextnext)) {
+				// In the simple controller, trains always move in the forwards
+				// direction. This is necessary because the controller has no
+				// knowledge of the network topology and cannot make any
+				// distinctions about what directions make sense.
+				send(new Event.DirectionChanged(trainID, true));
+				// In the simple controller, trains always move at a fixed velocity.
+				send(new Event.SpeedChanged(trainID, 0.75f));
+			} else {
+				// In this case, the train has started correctly but is now
+				// immediately waiting.
+			}
 			return true;
-		} else {
-			routes[trainID] = null;
-			stop(trainID);
-			return false;
-		}
+		} 
+		routes[trainID] = null;
+		stop(trainID);
+		return false;
 	}
 
 	@Override
@@ -168,5 +183,21 @@ public class SimpleController implements Controller {
 		for(Listener l : listeners) {
 			l.notify(e);
 		}
+	}
+	
+	private boolean isValid(Route r) {
+		Integer prev = null;
+		int current = r.firstSection();
+		Integer next = r.nextSection(current);
+		while (current != r.lastSection()) {
+			Section section = sections[current];
+			if (prev != null && !section.isValidRoute(prev, next)) {
+				return false;
+			}
+			prev = current;
+			current = r.nextSection(current);
+			next = r.nextSection(current);
+		}
+		return true;
 	}
 }

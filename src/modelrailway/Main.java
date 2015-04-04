@@ -11,6 +11,7 @@ import modelrailway.core.Controller;
 import modelrailway.core.Event;
 import modelrailway.core.Route;
 import modelrailway.core.Event.SpeedChanged;
+import modelrailway.core.Section;
 import modelrailway.core.Train;
 import modelrailway.util.SimpleController;
 
@@ -318,7 +319,34 @@ public class Main {
 				new Train(0,true), // default config for train 1
 				new Train(0,true)  // default config for train 2
 		};
-		Controller controller = new SimpleController(trains);
+		Section[] sections = {
+			null, // no section 0
+			new Section(new int[][]{{8,2}}), // 1
+			new Section(new int[][]{{1,3}}), // 2
+			new Section(new int[][]{{2,4}}), // 3
+			new Section(new int[][]{{3,5}}), // 4
+			new Section(new int[][]{{4,6}}), // 5
+			new Section(new int[][]{{5,7}}), // 6
+			new Section(new int[][]{{6,8}}), // 7
+			new Section(new int[][]{{7,1}}), // 8
+			new Section(new int[][]{{16,10}}), // 9
+			new Section(new int[][]{{9,11}}), // 10
+			new Section(new int[][]{{10,12},{12,18}}), // 11
+			new Section(new int[][]{{11,13}}), // 12
+			new Section(new int[][]{{12,14}}), // 13
+			new Section(new int[][]{{13,15}}), // 14
+			new Section(new int[][]{{14,16}}), // 15
+			new Section(new int[][]{{15,9},{15,17}}), // 16
+			new Section(new int[][]{{16,18}}), // 17
+			new Section(new int[][]{{17,11}}), // 18
+			new Section(new int[][]{{}}), // 19
+			new Section(new int[][]{{}}), // 20
+			new Section(new int[][]{{}}), // 21
+			new Section(new int[][]{{}}), // 22
+			new Section(new int[][]{{}}), // 23
+				
+		};
+		Controller controller = new SimpleController(trains,sections);
 		railway.register(controller);
 		controller.register(railway);
 		new Main(railway,controller).readEvaluatePrintLoop();
