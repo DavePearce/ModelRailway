@@ -49,7 +49,7 @@ public class Route {
 	
 	/**
 	 * Determine the next section in this route after a given section. the
-	 * <code>null</code> value is returned if this route is not a loop, the
+	 * <code>null</code> value is returned if this route is not a loop, and the
 	 * given section is the last section. An exception is raised if the given
 	 * section is not in this route.
 	 * 
@@ -75,4 +75,34 @@ public class Route {
 		}
 		throw new IllegalArgumentException("Invalid section for route");
 	}		
+	
+	/**
+	 * Determine the previous section in this route before a given section. the
+	 * <code>null</code> value is returned if this route is not a loop, and the
+	 * given section is the first section. An exception is raised if the given
+	 * section is not in this route.
+	 * 
+	 * @param section
+	 * @return
+	 */
+	public Integer prevSection(int section) {
+		// Go through each section looking for a match.
+		for (int i = (sections.length-1); i >= 0; --i) {
+			if (sections[i] == section) {
+				// Found matching section. Now, determine previous section (if it
+				// exists).
+				if (i == 0 && !isLoop) {
+					// We reached the first section of the route.
+					return null;
+				} else if(i > 0) {
+					// No, there are still more sections before us
+					return sections[i-1];
+				} else {
+					// We're on a loop!
+					return sections[sections.length-1];
+				}
+			}
+		}
+		throw new IllegalArgumentException("Invalid section for route");
+	}
 }

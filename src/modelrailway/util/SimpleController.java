@@ -60,31 +60,27 @@ public class SimpleController implements Controller {
 			// Yes, route is valid and train is on the starting section.
 			routes[trainID] = route;
 			// Attempt to lock next section in route.
-			int current = route.firstSection();
-			int next = route.nextSection(route.firstSection());
-			Integer nextnext = route.nextSection(next);
-			if(sections[next].lockRoute(trainID, current, nextnext)) {
-				// In the simple controller, trains always move in the forwards
-				// direction. This is necessary because the controller has no
-				// knowledge of the network topology and cannot make any
-				// distinctions about what directions make sense.
-				send(new Event.DirectionChanged(trainID, true));
-				// In the simple controller, trains always move at a fixed velocity.
-				send(new Event.SpeedChanged(trainID, 0.75f));
+			if(acquireSectionLock(trainID)) {
+				// Ok, we have the lock so now start the train
+				trainAcquiredLock(trainID);
 			} else {
-				// In this case, the train has started correctly but is now
-				// immediately waiting.
+				// In this case, the train has started on its route correctly
+				// but is now immediately waiting to acquire the lock for the
+				// next section.  Therefore, it cannot actually begin yet.
 			}
 			return true;
-		} 
-		routes[trainID] = null;
-		stop(trainID);
-		return false;
+		} else {
+			// Something went wrong.
+			routes[trainID] = null;
+			stop(trainID);
+			return false;
+		}
 	}
 
 	@Override
 	public void stop(int trainID) {
-		send(new Event.SpeedChanged(trainID,0.0f));		
+		send(new Event.SpeedChanged(trainID,0.0f));
+		routes[trainID] = null;
 	}
 
 
@@ -113,24 +109,9 @@ public class SimpleController implements Controller {
 			if(trainID == -1) {
 				// this indicates a recognition failure. At this point, we just
 				// stop all trains as a simplistic emergency procedure.
-				//emergencyStopAll();
+				emergencyStopAll();
 			} else {
-				// We managed to determine which train caused this event,
-				// therefore we now update it's position.
-				Train train = trains[trainID];
-				Route route = routes[trainID];
-				Integer nextSection = route.nextSection(train.currentSection());
-				if(nextSection == null) {
-					// This indicates something went wrong.
-					emergencyStopAll();
-				} else {
-					train.setSection(nextSection);
-					if(nextSection == route.lastSection()) {
-						// The train has reached the last section of its route.
-						stop(trainID);
-						routes[trainID] = null;
-					}					
-				}
+				updateAfterSectionChanged(trainID);
 			}
 		}
 	}
@@ -154,6 +135,138 @@ public class SimpleController implements Controller {
 		}
 	}
 	
+	/**
+	 * <p>
+	 * Update the model after a section changed event for a given train. What we
+	 * know at this point is that the train has crossed the boundary between the
+	 * section it is currently in, and the next section in its declared route.
+	 * </p>
+	 * <p>
+	 * What we need to do here is to, firstly, update the current location of
+	 * the train recorded in the model. Furthermore, if this section is the last
+	 * section of its route, then we should stop the train. Otherwise, we must
+	 * attempt to lock the next section in its route. If we can obtain the lock,
+	 * then all is well and the train can continue. If we can't obtain the lock,
+	 * we need to stop the train and wait for the lock to be released. Finally,
+	 * we need to release one or more locks on sections previously held by this
+	 * train.
+	 * </p>
+	 * 
+	 * @param trainID
+	 */
+	private void updateAfterSectionChanged(int trainID) {
+		// First, determine the next section in this train's route.
+		Train train = trains[trainID];
+		Route route = routes[trainID];
+		int prevSection = train.currentSection();
+		Integer current = route.nextSection(prevSection);
+		
+		if(current == null) {
+			// This indicates something went wrong. It should essentially be
+			// impossible to get here. 
+			emergencyStopAll();
+		} else {
+			// Found the next section, so update the train's current location to
+			// it. This is because the train has moved from the section it was
+			// in to this section.
+			train.setSection(current);
+			// Now, release and locked sections that have become available.
+			releaseLockedSections(trainID);
+			// Finally, decide what to do next.
+			if(current == route.lastSection()) {
+				// The train has reached the last section of its route,
+				// therefore we stop the train.
+				stop(trainID);
+			} else {				
+				// The train has not reached the last section of its route.
+				// Therefore, we need to acquire the lock for the subsequent
+				// section in the route.
+				acquireSectionLock(trainID);
+				
+			}
+		}
+	}
+
+	/**
+	 * The given train has moved from the previous section in its route to the
+	 * current section. Therefore, one or more sections may have become
+	 * available and can be released. In doing so, there may be one or more
+	 * other trains which can acquire that lock and proceed with their journey.
+	 * 
+	 * @param trainID
+	 */
+	private void releaseLockedSections(int trainID) {
+		Train train = trains[trainID];
+		Route route = routes[trainID];
+		int prevSection = route.prevSection(train.currentSection());
+		Section section = sections[prevSection];
+		// TODO: for now, I'm just going to always release the previous section
+		// in the route. This is clearly unsafe as it's essentially assuming the
+		// train has no length (which clearly it does).
+		section.unlockRoute(trainID);
+		// Now, see whether there are any trains which are queued waiting for
+		// this lock.
+		int nextQueuedTrain = section.nextQueued();
+		if (nextQueuedTrain != -1) {
+			// Ok, this train now has the lock for that section and can proceed.
+			trainAcquiredLock(nextQueuedTrain);
+		}
+	}
+	
+	/**
+	 * Attempt to qcquire the lock for the next section in the given train's
+	 * route. If this lock can be acquired, then all is well and the train may
+	 * continue as normal. Otherwise, the train must wait until the lock for
+	 * that section becomes available.
+	 * 
+	 * @param trainID
+	 */
+	private boolean acquireSectionLock(int trainID) {
+		Train train = trains[trainID];
+		Route route = routes[trainID];
+		int currentSection = train.currentSection();
+		int nextSection = route.nextSection(currentSection);
+		Integer nextNextSection = route.nextSection(nextSection);
+		
+		if(sections[nextSection].lockRoute(trainID, currentSection, nextNextSection)) {
+			// Yes, we managed to acquire the lock --- so everything can
+			// continue as normal.
+			return true;
+		} else {
+			// No, we couldn't acquire the lock. This means the train is
+			// now queued waiting to acquire this lock. In the
+			// meantime, we must stop the train to prevent a potential
+			// accident!
+			stop(trainID);
+			return false;
+		}
+	}
+
+	/**
+	 * The train has now acquired the lock to the next section in its route. The
+	 * assumption is that, at this point, the train is standing still waiting
+	 * for the lock.  Therefore, the train should begin on its way!
+	 * 
+	 * @param trainID
+	 */
+	public void trainAcquiredLock(int trainID) {
+		// In the simple controller, trains always move in the forwards
+		// direction. This is necessary because the controller has no
+		// knowledge of the network topology and cannot make any
+		// distinctions about what directions make sense.
+		send(new Event.DirectionChanged(trainID, true));
+		// In the simple controller, trains always move at a fixed velocity.
+		send(new Event.SpeedChanged(trainID, 0.75f));
+	}
+	
+	/**
+	 * Determine whether a given route is valid or not. For a route to be
+	 * considered valid it must be possible to traverse each section, starting
+	 * from the beginning, to reach the next section in the route.
+	 * 
+	 * @param r
+	 * @return
+	 */
 	private boolean isValid(Route r) {
 		Integer prev = null;
 		int current = r.firstSection();
@@ -169,7 +282,7 @@ public class SimpleController implements Controller {
 		}
 		return true;
 	}
-	
+
 	/**
 	 * Given a section changed event, attempt to determine which train caused
 	 * the event. There are two kinds of events: rising-edge and falling edge. A
@@ -187,19 +300,21 @@ public class SimpleController implements Controller {
 	 *         found.
 	 */
 	private int determineTrainFromSectionChange(int section, boolean risingEdge) {
-		if(risingEdge) {
+		if (risingEdge) {
 			// This indicates that a train has moved into a new detection
 			// section. To figure out which train, we need to look at the
 			// next expected section for each train to see whether it
 			// matches any of them.
-			for(int i=0;i!=trains.length;++i) {
+			for (int i = 0; i != trains.length; ++i) {
 				Route route = routes[i];
-				if(route != null) {
-					Integer expected = route.nextSection(trains[i].currentSection());
+				if (route != null) {
+					Integer expected = route.nextSection(trains[i]
+							.currentSection());
 					if (expected != null && expected == section) {
 						// Matched
-						//System.out.println("MATCHED TRAIN " + i + " ENTERING SECTION " + section);
-						return i;						
+						// System.out.println("MATCHED TRAIN " + i +
+						// " ENTERING SECTION " + section);
+						return i;
 					}
 				}
 			}
@@ -207,14 +322,15 @@ public class SimpleController implements Controller {
 			// This indicates that a train has moved out of a given
 			// detection section. To figure out which train, we need simply
 			// need to decide which train was in that section.
-			for(int i=0;i!=trains.length;++i) {
-				if(trains[i].currentSection() == section) {
+			for (int i = 0; i != trains.length; ++i) {
+				if (trains[i].currentSection() == section) {
 					// Matched
-					//System.out.println("MATCHED TRAIN " + i + " LEAVING SECTION " + section);
-					return i;					
+					// System.out.println("MATCHED TRAIN " + i +
+					// " LEAVING SECTION " + section);
+					return i;
 				}
 			}
-		}	
+		}
 		// Unable to detect
 		return -1;
 	}
