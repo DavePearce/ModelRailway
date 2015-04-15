@@ -108,39 +108,8 @@ public class SimpleController implements Controller {
 			// confirm that this section changed event was the expected event
 			// for a route.  Second, we need to update the train with its
 			// current predicted section location.
-			int trainID = -1;
-
-			if(es.getInto()) {
-				// This indicates that a train has moved into a new detection
-				// section. To figure out which train, we need to look at the
-				// next expected section for each train to see whether it
-				// matches any of them.
-				for(int i=0;i!=trains.length;++i) {
-					Route route = routes[i];
-					if(route != null) {
-						Integer expected = route.nextSection(trains[i].currentSection());
-						if (expected != null && expected == section) {
-							// Matched
-							//System.out.println("MATCHED TRAIN " + i + " ENTERING SECTION " + section);
-							trainID = i;
-							break;
-						}
-					}
-				}
-			} else {
-				// This indicates that a train has moved out of a given
-				// detection section. To figure out which train, we need simply
-				// need to decide which train was in that section.
-				for(int i=0;i!=trains.length;++i) {
-					if(trains[i].currentSection() == section) {
-						// Matched
-						//System.out.println("MATCHED TRAIN " + i + " LEAVING SECTION " + section);
-						trainID = i;
-						break;
-					}
-				}
-			}
-			
+			int trainID = determineTrainFromSectionChange(section, es.getInto());
+						
 			if(trainID == -1) {
 				// this indicates a recognition failure. At this point, we just
 				// stop all trains as a simplistic emergency procedure.
@@ -199,5 +168,54 @@ public class SimpleController implements Controller {
 			next = r.nextSection(current);
 		}
 		return true;
+	}
+	
+	/**
+	 * Given a section changed event, attempt to determine which train caused
+	 * the event. There are two kinds of events: rising-edge and falling edge. A
+	 * rising edge event occurs when a train enters a detection section, as the
+	 * detector goes from low to high. A falling edge event occurs when a train
+	 * leaves a detection section, as the detector goes from high to low.
+	 * 
+	 * @param section
+	 *            The section number which triggered this event. This is
+	 *            normalised to be in the section space of the model, rather
+	 *            than the hardware.
+	 * @param risingEdge
+	 *            True if this is a risingEdge event, or false otherwise.
+	 * @return The train id matching this event, or -1 if no such train was
+	 *         found.
+	 */
+	private int determineTrainFromSectionChange(int section, boolean risingEdge) {
+		if(risingEdge) {
+			// This indicates that a train has moved into a new detection
+			// section. To figure out which train, we need to look at the
+			// next expected section for each train to see whether it
+			// matches any of them.
+			for(int i=0;i!=trains.length;++i) {
+				Route route = routes[i];
+				if(route != null) {
+					Integer expected = route.nextSection(trains[i].currentSection());
+					if (expected != null && expected == section) {
+						// Matched
+						//System.out.println("MATCHED TRAIN " + i + " ENTERING SECTION " + section);
+						return i;						
+					}
+				}
+			}
+		} else {
+			// This indicates that a train has moved out of a given
+			// detection section. To figure out which train, we need simply
+			// need to decide which train was in that section.
+			for(int i=0;i!=trains.length;++i) {
+				if(trains[i].currentSection() == section) {
+					// Matched
+					//System.out.println("MATCHED TRAIN " + i + " LEAVING SECTION " + section);
+					return i;					
+				}
+			}
+		}	
+		// Unable to detect
+		return -1;
 	}
 }
