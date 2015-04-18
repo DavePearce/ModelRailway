@@ -227,11 +227,10 @@ public class ModelRailway implements LocoNetListener, ThrottleListener, Event.Li
 		} else if (event instanceof Event.DirectionChanged) {
 			Event.DirectionChanged e = (Event.DirectionChanged) event;
 			throttles[e.getLocomotive()].setIsForward(e.getDirection());
-		} else if (event instanceof Event.EmergencyStop) {
-			System.out.println("*** EMERGENCY STOP ***");
-			Event.EmergencyStop e = (Event.EmergencyStop) event;
-			// throttles[e.getLocomotive()]
-			// .setSpeedSetting(LnConstants.OPC_LOCO_SPD_ESTOP);
+		} else if(event instanceof Event.EmergencyStop) {
+			Event.EmergencyStop e = (Event.EmergencyStop) event;			
+//			throttles[e.getLocomotive()]
+//					.setSpeedSetting(LnConstants.OPC_LOCO_SPD_ESTOP);
 			throttles[e.getLocomotive()].setSpeedSetting(0.0f);
 		} else if (event instanceof Event.TurnoutChanged) {
 			Event.TurnoutChanged tc = (Event.TurnoutChanged) event;

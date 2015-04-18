@@ -7,8 +7,10 @@ import modelrailway.core.Event.Listener;
 import modelrailway.core.Event.TurnoutChanged;
 
 /**
- * A very simplistic implementation of the controller interface. This manages
- * trains as they progress through specific routes. 
+ * A very simplistic implementation of the controller interface. This tracks
+ * trains as they progress on specific routes through sections. Every train must
+ * acquire the lock for a given section before it can enter it. This ensures
+ * that no two trains are ever in the same section at the same time.
  * 
  * @author David J. Pearce
  *
@@ -20,7 +22,8 @@ public class SimpleController implements Controller {
 	private ArrayList<Event.Listener> listeners = new ArrayList<Event.Listener>();
 	
 	/**
-	 * The current trains being tracked on the network.
+	 * The current trains being tracked on the network. Each train records which
+	 * section it is currently on.
 	 */
 	private Train[] trains;
 	
@@ -56,12 +59,15 @@ public class SimpleController implements Controller {
 	@Override
 	public boolean start(int trainID, Route route) {
 		Train train = trains[trainID];
+		// First, check whether the route is valid and the train is on the
+		// starting section.
 		if (isValid(route) && route.firstSection() == train.currentSection()) {
 			// Yes, route is valid and train is on the starting section.
 			routes[trainID] = route;
-			// Attempt to lock next section in route.
+			// Attempt to lock the next section in route.
 			if(acquireSectionLock(trainID)) {
-				// Ok, we have the lock so now start the train
+				// Ok, we have the lock so now start the train moving!
+				System.out.println("ACQUIRED LOCK - " + trainID);
 				trainAcquiredLock(trainID);
 			} else {
 				// In this case, the train has started on its route correctly
@@ -70,7 +76,7 @@ public class SimpleController implements Controller {
 			}
 			return true;
 		} else {
-			// Something went wrong.
+			// Something went wrong, so stop the train.
 			routes[trainID] = null;
 			stop(trainID);
 			return false;
@@ -80,7 +86,6 @@ public class SimpleController implements Controller {
 	@Override
 	public void stop(int trainID) {
 		send(new Event.SpeedChanged(trainID,0.0f));
-		routes[trainID] = null;
 	}
 
 
@@ -116,24 +121,16 @@ public class SimpleController implements Controller {
 		}
 	}
 	
+	/**
+	 * Force all trains on the network to perform an emergency stop.
+	 */
 	private void emergencyStopAll() {
 		System.out.println("INVOKING EMERGENCY STOP");
 		for(int i=0;i!=trains.length;++i) {
 			routes[i] = null;
 			send(new Event.EmergencyStop(i));
 		}
-	}
-	
-	/**
-	 * A helper function for broadcasting events to all registered listeners.
-	 * 
-	 * @param e
-	 */
-	private void send(Event e) {
-		for(Listener l : listeners) {
-			l.notify(e);
-		}
-	}
+	}	
 	
 	/**
 	 * <p>
@@ -195,10 +192,11 @@ public class SimpleController implements Controller {
 	 * 
 	 * @param trainID
 	 */
-	private void releaseLockedSections(int trainID) {
+	private void releaseLockedSections(int trainID) {		
 		Train train = trains[trainID];
 		Route route = routes[trainID];
 		int prevSection = route.prevSection(train.currentSection());
+		System.out.println("RELEASING LOCK: " + prevSection + "(train: " + trainID + ")");
 		Section section = sections[prevSection];
 		// TODO: for now, I'm just going to always release the previous section
 		// in the route. This is clearly unsafe as it's essentially assuming the
@@ -227,10 +225,11 @@ public class SimpleController implements Controller {
 		int currentSection = train.currentSection();
 		int nextSection = route.nextSection(currentSection);
 		Integer nextNextSection = route.nextSection(nextSection);
-		
+		System.out.print("ATTEMPTING TO ACQUIRE LOCK - " + nextNextSection + "(train: " + trainID + ") ... ");
 		if(sections[nextSection].lockRoute(trainID, currentSection, nextNextSection)) {
 			// Yes, we managed to acquire the lock --- so everything can
 			// continue as normal.
+			System.out.println("[OK]");
 			return true;
 		} else {
 			// No, we couldn't acquire the lock. This means the train is
@@ -238,6 +237,7 @@ public class SimpleController implements Controller {
 			// meantime, we must stop the train to prevent a potential
 			// accident!
 			stop(trainID);
+			System.out.println("[FAILED]");
 			return false;
 		}
 	}
@@ -333,5 +333,17 @@ public class SimpleController implements Controller {
 		}
 		// Unable to detect
 		return -1;
+	}
+	
+
+	/**
+	 * A helper function for broadcasting events to all registered listeners.
+	 * 
+	 * @param e
+	 */
+	private void send(Event e) {
+		for(Listener l : listeners) {
+			l.notify(e);
+		}
 	}
 }

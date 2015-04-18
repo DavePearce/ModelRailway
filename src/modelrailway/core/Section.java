@@ -58,10 +58,11 @@ public class Section {
 	 * @param trainID
 	 * @param entry
 	 * @param exit
+	 *            --- may be null if no exit planned
 	 * @return
 	 */
-	public synchronized boolean lockRoute(int trainID, int entry, int exit) {
-		if(!isValidRoute(entry,exit)) {
+	public synchronized boolean lockRoute(int trainID, int entry, Integer exit) {
+		if(exit != null && !isValidRoute(entry,exit)) {
 			return false;
 		} 
 		queue.add(trainID);
@@ -75,7 +76,7 @@ public class Section {
 	 * @return
 	 */
 	public synchronized boolean unlockRoute(int trainID) {
-		if(queue.size() > 1 && queue.get(0) == trainID) {
+		if(queue.size() > 0 && queue.get(0) == trainID) {
 			queue.remove(0);
 			return true; 
 		} else {

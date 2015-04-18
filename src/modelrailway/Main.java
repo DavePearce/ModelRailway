@@ -3,8 +3,10 @@ package modelrailway;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.Reader;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 import modelrailway.core.Controller;
@@ -23,10 +25,10 @@ import modelrailway.util.SimpleController;
  *
  */
 public class Main {
-	private ModelRailway railway;
+	private Event.Listener railway;
 	private Controller controller;
 	
-	public Main(ModelRailway railway, Controller controller) {
+	public Main(Event.Listener railway, Controller controller) {
 		this.railway = railway;
 		this.controller = controller;
 	}
@@ -94,16 +96,16 @@ public class Main {
 		System.out.println("Setting turnout: " + turnout + " to: " + thrown);
 		controller.set(turnout, thrown);
 	}
+
+	public void setVerbose(boolean flag) {
+		// railway.setVerbose(flag)
+	}
 	
 	public void printHelp() {
 		System.out.println("Model rail commands:");
 		for(Command c : commands) {
 			System.out.println("\t" + c.keyword);
 		}
-	}
-	
-	public void setVerbose(boolean verbose) {
-		railway.setVerbose(verbose);
 	}
 
 	// =========================================================================
@@ -122,13 +124,23 @@ public class Main {
 	private void readEvaluatePrintLoop() {
 		final BufferedReader input = new BufferedReader(new InputStreamReader(
 				System.in));
-
+		ArrayList<String> history = new ArrayList<String>();
 		try {
 			System.out.println("Welcome to the Model Railway!");
+			
 			while (true) {
 				System.out.print("> ");
 				// Read the input line
 				String line = input.readLine();
+				// Check whether this is a meta operation
+				if(line.equals("\"")) {
+					// Pull out command from history
+					line = history.get(history.size()-1);
+					System.out.print("> " + line);
+					line = line + input.readLine();
+				}
+				// Record the current command in the history
+				history.add(line);
 				// Attempt to execute the input line
 				boolean isOK = execute(line);
 				if(!isOK) {
@@ -269,15 +281,39 @@ public class Main {
 				}
 			} else if (parameter == int[].class) {
 				String[] numbers = token.split(",");
-				int[] array = new int[numbers.length];
+				ArrayList<Integer> list = new ArrayList<Integer>();
 				for (int i = 0; i != numbers.length; ++i) {
-					try {
-						array[i] = Integer.parseInt(numbers[i]);
+					String number = numbers[i];					
+					try {						
+						int split = number.indexOf('-');
+						int first,last;
+						if(split == -1) {
+							first = last = Integer.parseInt(numbers[i]); 
+						} else{							
+							first = Integer.parseInt(number.substring(0,split));
+							last = Integer.parseInt(number.substring(split+1));
+						}		
+						if (first <= last) {
+							for (int k = first; k <= last; ++k) {
+								list.add(k);
+							}
+						} else {
+							for (int k = first; k >= last; --k) {
+								list.add(k);
+							}
+						}
 					} catch (NumberFormatException e) {
 						return null;
 					}
 				}
-				return array;
+				
+				// Hmmm, so ArrayList.toArray() doesn't work here. That's
+				// annoying!
+				int[] r = new int[list.size()];
+				for(int i=0;i!=list.size();++i) {
+					r[i] = list.get(i);
+				}
+				return r;
 			} else if(parameter == String.class) {
 				return token;
 			} else {
@@ -293,27 +329,42 @@ public class Main {
 	// =========================================================================
 	public static void main(String args[]) throws Exception {
 		String port = args[0];
-
-		// Construct the model railway assuming the interface (i.e. USB Cable)
-		// is on a given port. Likewise, we initialise it with three locomotives
-		// whose addresses are 1,2 + 3. If more locomotives are to be used, this
-		// needs to be updated accordingly.
-		final ModelRailway railway = new ModelRailway(port,
-				new int[] { 1, 2, 3 });
+		boolean simulation = false;
+		Event.Listener railway;
 		
-		// Add shutdown hook to make sure resources are released when quiting
-		// the application, even if the application is quit in a non-standard
-		// fashion.
-		Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
-			@Override
-			public void run() {
-				System.out.println("Disconnecting from railway...");
-				railway.destroy();
-			}
-		}) {
-		});
+		// Construct the railway controller which will oversea the movement and
+		// tracking of trains on the network.
+		Controller controller = createRailwayController();
+		
+		// Now, construct the railway network connection, which may be the
+		// physical hardware or just a simulation.
+		if (simulation) {
+			railway = null;
+		} else {
+			railway = createRailwayConnection(port,controller);
+		}
+		
+		controller.register(railway);
 
-		// Enter Read, Evaluate, Print loop.
+		// Finally, create and enter the read-eval-print loop.
+		new Main(railway,controller).readEvaluatePrintLoop();
+	}
+	
+	/**
+	 * <p>
+	 * Create the railway controller which will manage the railway,
+	 * independently of whether or not it's the physical railway or a
+	 * simulation.
+	 * </p>
+	 * <p>
+	 * NOTE: at the moment, this uses a hardcoded representation of the railway
+	 * layout. However, it doesn't have to be like this!
+	 * </p>
+	 * 
+	 * @return
+	 */
+	private static Controller createRailwayController() {
+
 		Train[] trains = {
 				new Train(0,true), // default config for train 0 
 				new Train(0,true), // default config for train 1
@@ -346,9 +397,40 @@ public class Main {
 			new Section(new int[][]{{}}), // 23
 				
 		};
-		Controller controller = new SimpleController(trains,sections);
+		return new SimpleController(trains,sections);
+	}
+	
+	/**
+	 * Construct our connection to the physical railway. This can fail in a
+	 * variety of ways, for example if the USB cable is not plugged in!
+	 * 
+	 * @param port
+	 * @return
+	 * @throws Exception
+	 */
+	private static Event.Listener createRailwayConnection(String port,
+			Controller controller) throws Exception {
+		// Construct the model railway assuming the interface (i.e. USB
+		// Cable) is on a given port. Likewise, we initialise it with three
+		// locomotives whose addresses are 1,2 + 3. If more locomotives are
+		// to be used, this needs to be updated accordingly.
+		final ModelRailway railway = new ModelRailway(port,
+				new int[] { 1, 2, 3 });
+
+		// Add shutdown hook to make sure resources are released when
+		// quiting the application, even if the application is quit in a
+		// non-standard fashion.
+		Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+			@Override
+			public void run() {
+				System.out.println("Disconnecting from railway...");
+				railway.destroy();
+			}
+		}) {
+		});
+
 		railway.register(controller);
-		controller.register(railway);
-		new Main(railway,controller).readEvaluatePrintLoop();
+		
+		return railway;
 	}
 }
