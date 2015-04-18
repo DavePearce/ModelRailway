@@ -9,6 +9,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+import static modelrailway.core.Section.Config.*;
 import modelrailway.core.Controller;
 import modelrailway.core.Event;
 import modelrailway.core.Route;
@@ -370,32 +371,83 @@ public class Main {
 				new Train(0,true), // default config for train 1
 				new Train(0,true)  // default config for train 2
 		};
-		Section[] sections = {
-			null, // no section 0
-			new Section(new int[][]{{8,2}}), // 1
-			new Section(new int[][]{{1,3}}), // 2
-			new Section(new int[][]{{2,4}}), // 3
-			new Section(new int[][]{{3,5}}), // 4
-			new Section(new int[][]{{4,6}}), // 5
-			new Section(new int[][]{{5,7}}), // 6
-			new Section(new int[][]{{6,8}}), // 7
-			new Section(new int[][]{{7,1}}), // 8
-			new Section(new int[][]{{16,10}}), // 9
-			new Section(new int[][]{{9,11}}), // 10
-			new Section(new int[][]{{10,12},{12,18}}), // 11
-			new Section(new int[][]{{11,13}}), // 12
-			new Section(new int[][]{{12,14}}), // 13
-			new Section(new int[][]{{13,15}}), // 14
-			new Section(new int[][]{{14,16}}), // 15
-			new Section(new int[][]{{15,9},{15,17}}), // 16
-			new Section(new int[][]{{16,18}}), // 17
-			new Section(new int[][]{{17,11}}), // 18
-			new Section(new int[][]{{}}), // 19
-			new Section(new int[][]{{}}), // 20
-			new Section(new int[][]{{}}), // 21
-			new Section(new int[][]{{}}), // 22
-			new Section(new int[][]{{}}), // 23
-				
+		Section[] sections = { null, // no section 0
+
+				// Section 1
+				new Section(new Section.Config(8, 2)),
+
+				// Section 2
+				new Section(new Section.Config(1, 3)),
+
+				// Section 3
+				new Section(
+						new Section.Config(2, 4, new int[] { 6, CLOSED }),
+						new Section.Config(10, 4, new int[] { 6, THROWN })),
+
+				// Section 4
+				new Section(
+						new Section.Config(3, 5, new int[] { 7, CLOSED }),
+						new Section.Config(3, 19, new int[] { 7, THROWN })),
+
+				// Section 5
+				new Section(new Section.Config(4, 6)),
+
+				// Section 6
+				new Section(new Section.Config(5, 7)),
+
+				// Section 7
+				new Section(new Section.Config(6, 8)),
+
+				// Section 8
+				new Section(
+						new Section.Config(7, 1, new int[] { 2, CLOSED }),
+						new Section.Config(7, 9, new int[] { 2, THROWN })),
+
+				// Section 9
+				new Section(
+						new Section.Config(16, 10, new int[] { 3, CLOSED }),
+						new Section.Config(8, 10, new int[] { 3, THROWN })),
+
+				// Section 10
+				new Section(
+						new Section.Config(9, 11, new int[] { 4, CLOSED }),
+						new Section.Config(9, 3, new int[] { 4, THROWN })),
+
+				// Section 11
+				new Section(
+						new Section.Config(10, 12, new int[] { 5, CLOSED }),
+						new Section.Config(17, 12, new int[] { 5, THROWN })),
+
+				// Section 12
+				new Section(
+						new Section.Config(11, 13, new int[] { 8, CLOSED }),
+						new Section.Config(11, 21, new int[] { 8, THROWN })),
+
+				// Section 13
+				new Section(new Section.Config(12, 14)),
+
+				// Section 14
+				new Section(new Section.Config(13, 15)),
+
+				// Section 15
+				new Section(new Section.Config(14, 16)),
+
+				// Section 16
+				new Section(
+						new Section.Config(15, 9, new int[] { 1, CLOSED }),
+						new Section.Config(15, 18, new int[] { 1, THROWN })),
+
+				// Section 17
+				new Section(new Section.Config(16, 18)),
+
+				// Section 18
+				new Section(new Section.Config(17, 11)),
+		// new Section(new Section.Route()), // 19
+		// new Section(new Section.Route()), // 20
+		// new Section(new Section.Route()), // 21
+		// new Section(new Section.Route()), // 22
+		// new Section(new Section.Route()), // 23
+
 		};
 		return new SimpleController(trains,sections);
 	}

@@ -1,6 +1,8 @@
 package modelrailway.core;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Represents a single section on the railway, which may be made up from
@@ -16,7 +18,7 @@ public class Section {
 	/**
 	 * Array of pairs of entry / exit routes.
 	 */
-	private final int[][] routes;
+	private final Config[] configurations;
 	
 	/**
 	 * The "lock queue". That is the queue of trains wishing to lock (and,
@@ -26,8 +28,8 @@ public class Section {
 	 */
 	private ArrayList<Integer> queue;
 
-	public Section(int[]... routes) {
-		this.routes = routes;
+	public Section(Config... configurations) {
+		this.configurations = configurations;
 		this.queue = new ArrayList<Integer>(); 
 	}
 
@@ -37,17 +39,27 @@ public class Section {
 	 * @param entry
 	 * @return
 	 */
-	public boolean isValidRoute(int entry,int exit) {
-		
-		for(int[] pair : routes) {
-			if(pair[0] == entry && pair[1] == exit) {
-				return true;
-			} else if(pair[0] == exit && pair[1] == entry) {
-				return true;
+	public boolean isValidConfiguration(int entry,int exit) {		
+		return getTurnoutConfiguration(entry,exit) != null;
+	}
+	
+	/**
+	 * Get the turnout information associated with a given configuration. This
+	 * is to enable the railway to configure the turnouts accordingly.
+	 * 
+	 * @param entry
+	 * @param exit
+	 * @return
+	 */
+	public Map<Integer, Boolean> getTurnoutConfiguration(int entry, int exit) {
+		for (Config pair : configurations) {
+			if (pair.entry == entry && pair.exit == exit) {
+				return pair.turnouts;
+			} else if (pair.entry == exit && pair.exit == entry) {
+				return pair.turnouts;
 			}
 		}
-		
-		return false;
+		return null;
 	}
 	
 	/**
@@ -61,8 +73,8 @@ public class Section {
 	 *            --- may be null if no exit planned
 	 * @return
 	 */
-	public synchronized boolean lockRoute(int trainID, int entry, Integer exit) {
-		if(exit != null && !isValidRoute(entry,exit)) {
+	public synchronized boolean lock(int trainID, int entry, Integer exit) {
+		if(exit != null && !isValidConfiguration(entry,exit)) {
 			return false;
 		} 
 		queue.add(trainID);
@@ -75,7 +87,7 @@ public class Section {
 	 * @param trainID
 	 * @return
 	 */
-	public synchronized boolean unlockRoute(int trainID) {
+	public synchronized boolean unlock(int trainID) {
 		if(queue.size() > 0 && queue.get(0) == trainID) {
 			queue.remove(0);
 			return true; 
@@ -93,6 +105,47 @@ public class Section {
 			return -1;
 		} else {
 			return queue.get(0);
+		}
+	}
+	
+	/**
+	 * A Section route is a specific route through a section. Most sections only
+	 * have one route through them (i.e. they are straight pieces). However,
+	 * sections which contain turnouts can have multiple routes through them.
+	 * Each route needs to know which neighbouring sections it connects
+	 * together, as well as how the turnouts need to be configured for it.
+	 * 
+	 * @author David J. Pearce
+	 *
+	 */
+	public static class Config {
+		public static final int CLOSED = 0;
+		public static final int THROWN = 1;
+		
+		/**
+		 * The section from which this route is entered when travelling this
+		 * route in the forwards orientation.
+		 */
+		private int entry;
+		
+		/**
+		 * The section to which follows on from this route when travelling in
+		 * the forwards orientation.
+		 */
+		private int exit;
+		
+		/**
+		 * The turnout configuration required for this route
+		 */
+		private Map<Integer,Boolean> turnouts;
+		
+		public Config(int entry, int exit, int[]... configuration) {
+			this.entry = entry;
+			this.exit = exit;
+			this.turnouts = new HashMap<Integer,Boolean>();
+			for(int[] pair : configuration) {
+				this.turnouts.put(pair[0], pair[1] == THROWN);
+			}
 		}
 	}
 }

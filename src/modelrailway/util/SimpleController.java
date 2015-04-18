@@ -201,7 +201,7 @@ public class SimpleController implements Controller {
 		// TODO: for now, I'm just going to always release the previous section
 		// in the route. This is clearly unsafe as it's essentially assuming the
 		// train has no length (which clearly it does).
-		section.unlockRoute(trainID);
+		section.unlock(trainID);
 		// Now, see whether there are any trains which are queued waiting for
 		// this lock.
 		int nextQueuedTrain = section.nextQueued();
@@ -226,9 +226,15 @@ public class SimpleController implements Controller {
 		int nextSection = route.nextSection(currentSection);
 		Integer nextNextSection = route.nextSection(nextSection);
 		System.out.print("ATTEMPTING TO ACQUIRE LOCK - " + nextNextSection + "(train: " + trainID + ") ... ");
-		if(sections[nextSection].lockRoute(trainID, currentSection, nextNextSection)) {
-			// Yes, we managed to acquire the lock --- so everything can
-			// continue as normal.
+		Section section = sections[nextSection];
+		if(section.lock(trainID, currentSection, nextNextSection)) {
+			// Yes, we managed to acquire the lock --- so we must now configure
+			// the section and everything can continue as normal.
+			if(nextNextSection != null) {
+				// FIXME: what happens in the case of terminating in a section
+				// is really a bug I think.
+				configureSection(section,currentSection,nextNextSection);
+			}
 			System.out.println("[OK]");
 			return true;
 		} else {
@@ -260,6 +266,25 @@ public class SimpleController implements Controller {
 	}
 	
 	/**
+	 * Go through the turnout configuration for the given section and apply it.
+	 * This means signalling to the hardware the setting for each turnout in the
+	 * section.
+	 * 
+	 * @param section
+	 *            --- Section to be configured
+	 * @param entry
+	 *            -- entry point to that section
+	 * @param exit
+	 *            -- exit point to that section
+	 */
+	public void configureSection(Section section, int entry, int exit) {
+		Map<Integer,Boolean> config = section.getTurnoutConfiguration(entry, exit);
+		for(Map.Entry<Integer,Boolean> p : config.entrySet()) {
+			set(p.getKey(),p.getValue());
+		}
+	}
+	
+	/**
 	 * Determine whether a given route is valid or not. For a route to be
 	 * considered valid it must be possible to traverse each section, starting
 	 * from the beginning, to reach the next section in the route.
@@ -273,7 +298,7 @@ public class SimpleController implements Controller {
 		Integer next = r.nextSection(current);
 		while (current != r.lastSection()) {
 			Section section = sections[current];
-			if (prev != null && !section.isValidRoute(prev, next)) {
+			if (prev != null && !section.isValidConfiguration(prev, next)) {
 				return false;
 			}
 			prev = current;
